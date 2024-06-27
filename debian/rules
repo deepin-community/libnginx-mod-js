@@ -1,4 +1,29 @@
 #!/usr/bin/make -f
 
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# nginx_mod needs to find the modules source dir using sourcedirectory
+# nginx_mod calls doit_in_builddir but without builddirectory,
+# it tries to chdir from sourcedirectory and fails
+
 %:
-	dh $@
+	dh $@ --sourcedirectory=nginx --builddirectory=build-modules
+
+
+override_dh_auto_configure:
+	./configure \
+		--cc-opt="$(shell dpkg-buildflags --get CFLAGS) -fPIC $(shell dpkg-buildflags --get CPPFLAGS)" \
+		--ld-opt="$(shell dpkg-buildflags --get LDFLAGS)" \
+		--no-libxml2 \
+		--no-zlib
+	dh_auto_configure --buildsystem=nginx_mod
+
+override_dh_auto_build-arch:
+	make
+	dh_auto_build --buildsystem=nginx_mod
+	help2man --no-info --version-option=-v --help-option=-h --name='JavaScript for Nginx' ./build/njs -o build/njs.1
+
+override_dh_auto_clean:
+	rm -f Makefile
+	rm -rf build
+	rm -rf build-modules
