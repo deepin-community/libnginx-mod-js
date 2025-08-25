@@ -11,8 +11,8 @@
 
 #include <njs_auto_config.h>
 
-#define NJS_VERSION                 "0.8.4"
-#define NJS_VERSION_NUMBER          0x000804
+#define NJS_VERSION                 "0.8.9"
+#define NJS_VERSION_NUMBER          0x000809
 
 
 #include <string.h>
@@ -72,6 +72,8 @@ extern const njs_value_t            njs_value_undefined;
     njs_vm_error2(vm, 2, fmt, ##__VA_ARGS__)
 #define njs_vm_range_error(vm, fmt, ...)                                      \
     njs_vm_error2(vm, 3, fmt, ##__VA_ARGS__)
+#define njs_vm_ref_error(vm, fmt, ...)                                        \
+    njs_vm_error2(vm, 4, fmt, ##__VA_ARGS__)
 #define njs_vm_syntax_error(vm, fmt, ...)                                     \
     njs_vm_error2(vm, 5, fmt, ##__VA_ARGS__)
 #define njs_vm_type_error(vm, fmt, ...)                                       \
@@ -137,6 +139,7 @@ typedef enum {
     NJS_ENUM_STRING = 8,
     NJS_ENUM_SYMBOL = 16,
     NJS_ENUM_ENUMERABLE_ONLY = 32,
+    NJS_ENUM_NON_SHARED_ONLY = 64,
 } njs_object_enum_t;
 
 
@@ -295,11 +298,12 @@ NJS_EXPORT void njs_vm_destroy(njs_vm_t *vm);
 
 NJS_EXPORT njs_int_t njs_vm_compile(njs_vm_t *vm, u_char **start, u_char *end);
 NJS_EXPORT void njs_vm_set_module_loader(njs_vm_t *vm,
-        njs_module_loader_t module_loader, void *opaque);
+    njs_module_loader_t module_loader, void *opaque);
 NJS_EXPORT njs_mod_t *njs_vm_add_module(njs_vm_t *vm, njs_str_t *name,
     njs_value_t *value);
 NJS_EXPORT njs_mod_t *njs_vm_compile_module(njs_vm_t *vm, njs_str_t *name,
     u_char **start, u_char *end);
+NJS_EXPORT njs_int_t njs_vm_reuse(njs_vm_t *vm);
 NJS_EXPORT njs_vm_t *njs_vm_clone(njs_vm_t *vm, njs_external_ptr_t external);
 
 NJS_EXPORT njs_int_t njs_vm_enqueue_job(njs_vm_t *vm, njs_function_t *function,
@@ -314,7 +318,7 @@ NJS_EXPORT njs_int_t njs_vm_execute_pending_job(njs_vm_t *vm);
 NJS_EXPORT njs_int_t njs_vm_pending(njs_vm_t *vm);
 
 NJS_EXPORT void njs_vm_set_rejection_tracker(njs_vm_t *vm,
-        njs_rejection_tracker_t rejection_tracker, void *opaque);
+    njs_rejection_tracker_t rejection_tracker, void *opaque);
 
 /*
  * Runs the specified function with provided arguments.
@@ -400,14 +404,6 @@ NJS_EXPORT njs_int_t njs_value_to_integer(njs_vm_t *vm, njs_value_t *value,
 
 /*  Gets string value, no copy. */
 NJS_EXPORT void njs_value_string_get(njs_value_t *value, njs_str_t *dst);
-/*
- * Sets a byte string value.
- *   start data is not copied and should not be freed.
- */
-NJS_EXPORT njs_int_t njs_vm_value_string_set(njs_vm_t *vm, njs_value_t *value,
-    const u_char *start, uint32_t size);
-NJS_EXPORT u_char *njs_vm_value_string_alloc(njs_vm_t *vm, njs_value_t *value,
-    uint32_t size);
 NJS_EXPORT njs_int_t njs_vm_value_string_create(njs_vm_t *vm,
     njs_value_t *value, const u_char *start, uint32_t size);
 NJS_EXPORT njs_int_t njs_vm_value_string_create_chb(njs_vm_t *vm,

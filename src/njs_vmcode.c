@@ -2318,15 +2318,6 @@ njs_string_concat(njs_vm_t *vm, njs_value_t *val1, njs_value_t *val2,
     (void) njs_string_prop(&string2, val2);
 
     length = string1.length + string2.length;
-
-    /*
-     * A result of concatenation of Byte and ASCII or UTF-8 strings
-     * is a Byte string.
-     */
-    if (njs_is_byte_string(&string1) || njs_is_byte_string(&string2)) {
-        length = 0;
-    }
-
     size = string1.size + string2.size;
 
     start = njs_string_alloc(vm, retval, size, length);
@@ -2609,6 +2600,8 @@ njs_vmcode_import(njs_vm_t *vm, njs_mod_t *module, njs_value_t *retval)
         njs_memzero(m->start, m->items * sizeof(njs_value_t));
     }
 
+    njs_assert(module->index < vm->modules->items);
+
     value = njs_arr_item(vm->modules, module->index);
 
     if (!njs_is_null(value)) {
@@ -2646,7 +2639,6 @@ njs_vmcode_await(njs_vm_t *vm, njs_vmcode_await_t *await,
     njs_int_t           ret;
     njs_frame_t         *frame;
     njs_value_t         ctor, val, on_fulfilled, on_rejected, *value, retval;
-    njs_promise_t       *promise;
     njs_function_t      *fulfilled, *rejected;
     njs_native_frame_t  *active;
 
@@ -2660,8 +2652,8 @@ njs_vmcode_await(njs_vm_t *vm, njs_vmcode_await_t *await,
 
     njs_set_function(&ctor, &njs_vm_ctor(vm, NJS_OBJ_TYPE_PROMISE));
 
-    promise = njs_promise_resolve(vm, &ctor, value);
-    if (njs_slow_path(promise == NULL)) {
+    ret = njs_promise_resolve(vm, &ctor, value, &val);
+    if (njs_slow_path(ret != NJS_OK)) {
         return NJS_ERROR;
     }
 
@@ -2719,7 +2711,6 @@ njs_vmcode_await(njs_vm_t *vm, njs_vmcode_await_t *await,
     rejected->args_count = 1;
     rejected->u.native = njs_await_rejected;
 
-    njs_set_promise(&val, promise);
     njs_set_function(&on_fulfilled, fulfilled);
     njs_set_function(&on_rejected, rejected);
 

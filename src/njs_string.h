@@ -91,8 +91,7 @@ typedef struct {
 
 
 typedef enum {
-    NJS_STRING_BYTE = 0,
-    NJS_STRING_ASCII,
+    NJS_STRING_ASCII = 0,
     NJS_STRING_UTF8,
 } njs_utf8_t;
 
@@ -103,13 +102,11 @@ typedef enum {
 } njs_trim_t;
 
 
-njs_int_t njs_string_set(njs_vm_t *vm, njs_value_t *value, const u_char *start,
-    uint32_t size);
 u_char *njs_string_alloc(njs_vm_t *vm, njs_value_t *value, uint64_t size,
     uint64_t length);
 njs_int_t njs_string_new(njs_vm_t *vm, njs_value_t *value, const u_char *start,
     uint32_t size, uint32_t length);
-njs_int_t njs_string_create(njs_vm_t *vm, njs_value_t *value, const char *src,
+njs_int_t njs_string_create(njs_vm_t *vm, njs_value_t *value, const u_char *src,
     size_t size);
 njs_int_t njs_string_create_chb(njs_vm_t *vm, njs_value_t *value,
     njs_chb_t *chain);
@@ -149,8 +146,6 @@ void njs_string_truncate(njs_value_t *value, uint32_t size, uint32_t length);
 uint32_t njs_string_trim(const njs_value_t *value, njs_string_prop_t *string,
     unsigned mode);
 void njs_string_copy(njs_value_t *dst, njs_value_t *src);
-njs_int_t njs_string_validate(njs_vm_t *vm, njs_string_prop_t *string,
-    njs_value_t *value);
 njs_int_t njs_string_cmp(const njs_value_t *val1, const njs_value_t *val2);
 void njs_string_slice_string_prop(njs_string_prop_t *dst,
     const njs_string_prop_t *string, const njs_slice_prop_t *slice);
@@ -178,16 +173,9 @@ njs_int_t njs_string_get_substitution(njs_vm_t *vm, njs_value_t *matched,
 
 
 njs_inline njs_bool_t
-njs_is_byte_string(njs_string_prop_t *string)
+njs_is_ascii_string(njs_string_prop_t *string)
 {
-    return (string->length == 0 && string->size != 0);
-}
-
-
-njs_inline njs_bool_t
-njs_is_byte_or_ascii_string(njs_string_prop_t *string)
-{
-    return (string->length == 0 || string->length == string->size);
+    return string->length == string->size;
 }
 
 
@@ -197,10 +185,6 @@ njs_string_calc_length(njs_utf8_t utf8, const u_char *start, size_t size)
     ssize_t  length;
 
     switch (utf8) {
-
-    case NJS_STRING_BYTE:
-        return 0;
-
     case NJS_STRING_ASCII:
         return size;
 
@@ -208,7 +192,7 @@ njs_string_calc_length(njs_utf8_t utf8, const u_char *start, size_t size)
     default:
         length = njs_utf8_length(start, size);
 
-        return (length >= 0) ? length : 0;
+        return length;
     }
 }
 
@@ -250,11 +234,15 @@ njs_string_encode(const uint32_t *escape, size_t size, const u_char *src,
 njs_inline const u_char *
 njs_string_offset(njs_string_prop_t *string, int64_t index)
 {
-    if (njs_is_byte_or_ascii_string(string)) {
+    if (njs_is_ascii_string(string)) {
         return string->start + index;
     }
 
     /* UTF-8 string. */
+
+    if (index == (int64_t) string->length) {
+        return string->start + string->size;
+    }
 
     return njs_string_utf8_offset(string->start, string->start + string->size,
                                   index);

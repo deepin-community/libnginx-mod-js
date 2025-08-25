@@ -46,21 +46,39 @@ http {
         location / {
             js_content test.returnf;
         }
+
+        location /limit {
+            sendfile_max_chunk 5;
+            js_content test.returnf;
+        }
+
+        location /njs {
+            js_content test.njs;
+        }
     }
 }
 
 EOF
 
 $t->write_file('test.js', <<EOF);
-    function returnf(r) {
-        r.return(Number(r.args.c), r.args.t);
+    function test_njs(r) {
+        r.return(200, njs.version);
     }
 
-    export default {returnf};
+    function returnf(r) {
+        let body = r.args.t;
+        if (body && r.args.repeat) {
+            body = body.repeat(r.args.repeat);
+        }
+
+        r.return(Number(r.args.c), body);
+    }
+
+    export default {njs:test_njs, returnf};
 
 EOF
 
-$t->try_run('no njs return')->plan(5);
+$t->try_run('no njs return')->plan(7);
 
 ###############################################################################
 
@@ -69,5 +87,39 @@ like(http_get('/?c=200&t=SEE-THIS'), qr/200 OK.*^SEE-THIS$/ms, 'return text');
 like(http_get('/?c=301&t=path'), qr/ 301 .*Location: path/s, 'return redirect');
 like(http_get('/?c=404'), qr/404 Not.*html/s, 'return error page');
 like(http_get('/?c=inv'), qr/ 500 /, 'return invalid');
+
+TODO: {
+local $TODO = 'not yet' unless has_version('0.8.6');
+
+unlike(http_get('/?c=404&t='), qr/Not.*html/s, 'return empty body');
+
+}
+
+TODO: {
+local $TODO = 'not yet' unless has_version('0.8.8');
+
+like(http_get('/limit?c=200&t=X&repeat=50'), qr/200 OK.*X{50}/s,
+	'return limited');
+
+}
+
+###############################################################################
+
+sub has_version {
+	my $need = shift;
+
+	http_get('/njs') =~ /^([.0-9]+)$/m;
+
+	my @v = split(/\./, $1);
+	my ($n, $v);
+
+	for $n (split(/\./, $need)) {
+		$v = shift @v || 0;
+		return 0 if $n > $v;
+		return 1 if $v > $n;
+	}
+
+	return 1;
+}
 
 ###############################################################################

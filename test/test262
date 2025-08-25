@@ -8,6 +8,8 @@ set -e
 . test/options
 . test/setup
 
+export NJS_TEST_DIR
+
 for njs_test in $NJS_TESTS; do
     . test/prepare
 
@@ -19,6 +21,11 @@ for njs_test in $NJS_TESTS; do
 running $njs_test $njs_log
 END
 
+    if [ "$NJS_SKIP_LIST" != "${NJS_SKIP_LIST#*$njs_test*}" ]; then
+        skip $njs_test
+        continue
+    fi
+
     status=0
 
     NJS_PATH=$njs_paths \
@@ -27,11 +34,6 @@ END
 
     cat $njs_log >> $NJS_TEST_LOG
     njs_out=`cat $njs_log`
-
-    if [ "$NJS_SKIP_LIST" != "${NJS_SKIP_LIST#*$njs_test*}" ]; then
-        skip $njs_test
-        continue
-    fi
 
     if [ "$status" -eq 0 ]; then
         if [ -n "$njs_negative" ]; then

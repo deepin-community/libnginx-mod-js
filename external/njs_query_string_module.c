@@ -152,7 +152,7 @@ njs_query_string_decode(njs_vm_t *vm, njs_value_t *value, const u_char *start,
         -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     };
 
-    njs_chb_init(&chain, njs_vm_memory_pool(vm));
+    NJS_CHB_MP_INIT(&chain, vm);
     njs_utf8_decode_init(&ctx);
 
     cp = 0;
@@ -694,7 +694,7 @@ njs_query_string_stringify(njs_vm_t *vm, njs_value_t *args, njs_uint_t nargs,
     object = njs_arg(args, nargs, 1);
 
     if (njs_slow_path(!njs_value_is_object(object))) {
-        njs_vm_value_string_set(vm, retval, (u_char *) "", 0);
+        njs_vm_value_string_create(vm, retval, (u_char *) "", 0);
         return NJS_OK;
     }
 
@@ -749,7 +749,7 @@ njs_query_string_stringify(njs_vm_t *vm, njs_value_t *args, njs_uint_t nargs,
         encode = njs_value_function(val);
     }
 
-    njs_chb_init(&chain, njs_vm_memory_pool(vm));
+    NJS_CHB_MP_INIT(&chain, vm);
 
     keys = njs_vm_object_keys(vm, object, njs_value_arg(&value));
     if (njs_slow_path(keys == NULL)) {
@@ -841,7 +841,7 @@ njs_query_string_escape(njs_vm_t *vm, njs_value_t *args, njs_uint_t nargs,
 
     njs_value_string_get(string, &str);
 
-    njs_chb_init(&chain, njs_vm_memory_pool(vm));
+    NJS_CHB_MP_INIT(&chain, vm);
 
     ret = njs_query_string_encode(&chain, &str);
     if (njs_slow_path(ret != NJS_OK)) {

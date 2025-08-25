@@ -139,6 +139,11 @@ http {
             js_content test.sr_cache;
         }
 
+        location /sr_limit {
+            sendfile_max_chunk 5;
+            js_content test.sr_limit;
+        }
+
 
         location /sr_unavail {
             js_content test.sr_unavail;
@@ -178,6 +183,10 @@ http {
 
         location /sr_in_sr_callback {
             js_content test.sr_in_sr_callback;
+        }
+
+        location /sr_error_in_callback {
+            js_content test.sr_error_in_callback;
         }
 
         location /sr_uri_except {
@@ -276,7 +285,7 @@ $t->write_file('test.js', <<EOF);
     }
 
     function sr(r) {
-        subrequest_fn(r, ['/p/sub2'], ['uri', 'status'])
+        subrequest_fn(r, ['/p/sub2'], ['status'])
     }
 
     function sr_pr(r) {
@@ -381,12 +390,18 @@ $t->write_file('test.js', <<EOF);
         r.subrequest('/p/t', body_fwd_cb);
     }
 
+    function sr_limit(r) {
+        r.subrequest('/file/t', function (reply) {
+            r.return(200, "x".repeat(100));
+        });
+    }
+
     function sr_unavail(req) {
-        subrequest_fn(req, ['/unavail'], ['uri', 'status']);
+        subrequest_fn(req, ['/unavail'], ['status']);
     }
 
     function sr_unavail_pr(req) {
-        subrequest_fn_pr(req, ['/unavail'], ['uri', 'status']);
+        subrequest_fn_pr(req, ['/unavail'], ['status']);
     }
 
     function sr_unsafe(r) {
@@ -417,6 +432,12 @@ $t->write_file('test.js', <<EOF);
         .then(body_fwd_cb);
     }
 
+    function sr_error_in_callback(r) {
+        r.subrequest("/sub1", () => {});
+        r.subrequest("/sub1", () => { throw "Oops!"; });
+        r.return(200);
+    }
+
     function sr_in_sr_callback(r) {
         r.subrequest('/return', function (reply) {
                 try {
@@ -445,18 +466,20 @@ $t->write_file('test.js', <<EOF);
 
     function sr_out_of_order(r) {
         subrequest_fn(r, ['/p/delayed', '/p/sub1', '/unknown'],
-                      ['uri', 'status']);
+                      ['status']);
     }
 
     function collect(replies, props, total, reply) {
         reply.log(`subrequest handler: \${reply.uri} status: \${reply.status}`)
 
         var rep = {};
+        props.push('uri');
         props.forEach(p => {rep[p] = reply[p]});
 
         replies.push(rep);
 
         if (replies.length == total) {
+            replies.sort((a, b) => a.uri < b.uri ? -1 : 1);
             reply.parent.return(200, JSON.stringify(replies));
         }
     }
@@ -508,13 +531,13 @@ $t->write_file('test.js', <<EOF);
                     sr_js_in_subrequest, sr_js_in_subrequest_pr, js_sub,
                     sr_in_sr_callback, sr_out_of_order, sr_except_not_a_func,
                     sr_uri_except, sr_except_failed_to_convert_options_arg,
-                    sr_unsafe};
+                    sr_unsafe, sr_error_in_callback, sr_limit};
 
 EOF
 
 $t->write_file('t', '["SEE-THIS"]');
 
-$t->try_run('no njs available')->plan(33);
+$t->try_run('no njs available')->plan(34);
 $t->run_daemon(\&http_daemon);
 
 ###############################################################################
@@ -536,9 +559,9 @@ is(get_json('/sr_js_in_subrequest'), '["JS-SUB"]', 'sr_js_in_subrequest');
 is(get_json('/sr_unavail'), '[{"status":502,"uri":"/unavail"}]',
 	'sr_unavail');
 is(get_json('/sr_out_of_order'),
-	'[{"status":404,"uri":"/unknown"},' .
+	'[{"status":200,"uri":"/p/delayed"},' .
 	'{"status":206,"uri":"/p/sub1"},' .
-	'{"status":200,"uri":"/p/delayed"}]',
+	'{"status":404,"uri":"/unknown"}]',
 	'sr_multi');
 
 is(get_json('/sr_pr'), '{"h":"xxx"}', 'sr_promise');
@@ -575,6 +598,22 @@ like(http_get('/sr_unsafe'), qr/500/s, 'unsafe subrequest uri');
 
 }
 
+TODO: {
+local $TODO = 'not yet' unless has_version('0.8.5');
+
+http_get('/sr_error_in_callback');
+
+ok(index($t->read_file('error.log'), 'subrequest can only be created for') > 0,
+   'subrequest creation failed');
+
+}
+
+TODO: {
+local $TODO = 'not yet' unless has_version('0.8.8');
+
+like(http_get('/sr_limit'), qr/x{100}/, 'sr_limit');
+}
+
 $t->stop();
 
 ok(index($t->read_file('error.log'), 'callback is not a function') > 0,
@@ -585,8 +624,6 @@ ok(index($t->read_file('error.log'), 'failed to convert options.args') > 0,
 	'subrequest invalid args exception');
 ok(index($t->read_file('error.log'), 'too big subrequest response') > 0,
 	'subrequest too large body');
-ok(index($t->read_file('error.log'), 'subrequest creation failed') > 0,
-	'subrequest creation failed');
 ok(index($t->read_file('error.log'),
 		'js subrequest: failed to get the parent context') > 0,
 	'zero parent ctx');

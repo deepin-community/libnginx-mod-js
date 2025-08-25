@@ -52,6 +52,10 @@ NJS_LIB_SRCS=" \
    src/njs_builtin.c \
 "
 
+QJS_LIB_SRCS=" \
+	src/qjs.c   \
+"
+
 NJS_LIB_TEST_SRCS=" \
    src/test/lvlhsh_unit_test.c \
    src/test/random_unit_test.c \
