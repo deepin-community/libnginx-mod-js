@@ -2827,7 +2827,7 @@ njs_parser_arguments(njs_parser_t *parser, njs_lexer_token_t *token,
         return njs_parser_stack_pop(parser);
     }
 
-    parser->scope->in_args = 1;
+    parser->scope->in_args++;
 
     njs_parser_next(parser, njs_parser_argument_list);
 
@@ -2840,7 +2840,7 @@ static njs_int_t
 njs_parser_parenthesis_or_comma(njs_parser_t *parser, njs_lexer_token_t *token,
     njs_queue_link_t *current)
 {
-    parser->scope->in_args = 0;
+    parser->scope->in_args--;
 
     if (token->type == NJS_TOKEN_CLOSE_PARENTHESIS) {
         njs_lexer_consume_token(parser->lexer, 1);
@@ -3575,7 +3575,7 @@ njs_parser_await(njs_parser_t *parser, njs_lexer_token_t *token,
         return NJS_ERROR;
     }
 
-    if (parser->scope->in_args) {
+    if (parser->scope->in_args > 0) {
         njs_parser_syntax_error(parser, "await in arguments not supported");
         return NJS_ERROR;
     }
@@ -6699,23 +6699,32 @@ njs_parser_labelled_statement_after(njs_parser_t *parser,
 {
     njs_int_t                ret;
     uintptr_t                unique_id;
+    njs_parser_node_t        *node;
     const njs_lexer_entry_t  *entry;
 
-    if (parser->node != NULL) {
-        /* The statement is not empty block or just semicolon. */
-
-        unique_id = (uintptr_t) parser->target;
-        entry = (const njs_lexer_entry_t *) unique_id;
-
-        ret = njs_name_copy(parser->vm, &parser->node->name, &entry->name);
-        if (ret != NJS_OK) {
+    node = parser->node;
+    if (node == NULL) {
+        node = njs_parser_node_new(parser, NJS_TOKEN_BLOCK);
+        if (node == NULL) {
             return NJS_ERROR;
         }
 
-        ret = njs_label_remove(parser->vm, parser->scope, unique_id);
-        if (ret != NJS_OK) {
-            return NJS_ERROR;
-        }
+        node->token_line = token->line;
+
+        parser->node = node;
+    }
+
+    unique_id = (uintptr_t) parser->target;
+    entry = (const njs_lexer_entry_t *) unique_id;
+
+    ret = njs_name_copy(parser->vm, &parser->node->name, &entry->name);
+    if (ret != NJS_OK) {
+        return NJS_ERROR;
+    }
+
+    ret = njs_label_remove(parser->vm, parser->scope, unique_id);
+    if (ret != NJS_OK) {
+        return NJS_ERROR;
     }
 
     return njs_parser_stack_pop(parser);
@@ -8105,7 +8114,7 @@ njs_parser_module(njs_parser_t *parser, njs_str_t *name)
     vm = parser->vm;
 
     if (name->length == 0) {
-        njs_parser_syntax_error(parser, "Cannot find module \"%V\"", name);
+        njs_parser_ref_error(parser, "Cannot load module \"%V\"", name);
         return NULL;
     }
 
@@ -8115,13 +8124,16 @@ njs_parser_module(njs_parser_t *parser, njs_str_t *name)
     }
 
     if (vm->module_loader == NULL) {
-        njs_parser_syntax_error(parser, "Cannot load module \"%V\"", name);
+        njs_parser_ref_error(parser, "Module loader callback is not provided");
         return NULL;
     }
 
     module = vm->module_loader(vm, vm->module_loader_opaque, name);
     if (module == NULL) {
-        njs_parser_syntax_error(parser, "Cannot find module \"%V\"", name);
+        if (!njs_is_valid(&vm->exception)) {
+            njs_parser_ref_error(parser, "Cannot load module \"%V\"", name);
+        }
+
         return NULL;
     }
 
@@ -9242,7 +9254,7 @@ njs_parser_error(njs_vm_t *vm, njs_object_type_t type, njs_str_t *file,
     njs_value_property_set(vm, &error, njs_value_arg(&line_number), &value);
 
     if (file->length != 0) {
-        ret = njs_string_set(vm, &value, file->start, file->length);
+        ret = njs_string_create(vm, &value, file->start, file->length);
         if (ret == NJS_OK) {
             njs_value_property_set(vm, &error, njs_value_arg(&file_name),
                                    &value);

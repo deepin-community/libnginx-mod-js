@@ -4,7 +4,8 @@
  * Copyright (C) NGINX, Inc.
  */
 
-#include <njs_main.h>
+#include <njs.h>
+#include <njs_queue.h>
 
 #include "njs_externals_test.h"
 
@@ -29,10 +30,50 @@ typedef struct {
 } njs_opts_t;
 
 
+static njs_int_t njs_benchmark_preinit(njs_vm_t *vm);
+static njs_int_t njs_benchmark_init(njs_vm_t *vm);
+static njs_int_t njs_benchmark_string(njs_vm_t *vm, njs_value_t *args,
+    njs_uint_t nargs, njs_index_t unused, njs_value_t *retval);
+
+
+static njs_external_t  njs_benchmark_external[] = {
+
+    {
+        .flags = NJS_EXTERN_PROPERTY | NJS_EXTERN_SYMBOL,
+        .name.symbol = NJS_SYMBOL_TO_STRING_TAG,
+        .u.property = {
+            .value = "Benchmark",
+        }
+    },
+
+    {
+        .flags = NJS_EXTERN_METHOD,
+        .name.string = njs_str("string"),
+        .writable = 1,
+        .configurable = 1,
+        .enumerable = 1,
+        .u.method = {
+            .native = njs_benchmark_string,
+        }
+    },
+};
+
+
+njs_module_t  njs_benchmark_module = {
+    .name = njs_str("benchmark"),
+    .preinit = njs_benchmark_preinit,
+    .init = njs_benchmark_init,
+};
+
+
 njs_module_t *njs_benchmark_addon_external_modules[] = {
     &njs_unit_test_external_module,
-    NULL,
+    &njs_benchmark_module,
+    NULL
 };
+
+
+static njs_int_t    njs_benchmark_proto_id;
 
 
 static uint64_t
@@ -58,22 +99,24 @@ static njs_int_t
 njs_benchmark_test(njs_vm_t *parent, njs_opts_t *opts, njs_value_t *report,
     njs_benchmark_test_t *test)
 {
-    u_char        *start;
-    njs_vm_t      *vm, *nvm;
-    uint64_t      ns;
-    njs_int_t     ret;
-    njs_str_t     s, *expected;
-    njs_uint_t    i, n;
-    njs_bool_t    success;
-    njs_value_t   *result, retval, name, usec, times;
-    njs_vm_opt_t  options;
+    u_char              *start;
+    njs_vm_t            *vm, *nvm;
+    uint64_t            ns;
+    njs_int_t           ret;
+    njs_str_t           s, *expected;
+    njs_uint_t          i, n;
+    njs_bool_t          success;
+    njs_value_t         *result;
+    njs_vm_opt_t        options;
+    njs_opaque_value_t  retval, name, usec, times;
 
-    static const njs_value_t  name_key = njs_string("name");
-    static const njs_value_t  usec_key = njs_string("usec");
-    static const njs_value_t  times_key = njs_string("times");
+    static const njs_str_t  name_key = njs_str("name");
+    static const njs_str_t  usec_key = njs_str("usec");
+    static const njs_str_t  times_key = njs_str("times");
 
     njs_vm_opt_init(&options);
 
+    options.backtrace = 1;
     options.addons = njs_benchmark_addon_external_modules;
 
     vm = NULL;
@@ -108,9 +151,9 @@ njs_benchmark_test(njs_vm_t *parent, njs_opts_t *opts, njs_value_t *report,
             goto done;
         }
 
-        (void) njs_vm_start(nvm, &retval);
+        (void) njs_vm_start(nvm, njs_value_arg(&retval));
 
-        if (njs_vm_value_string(nvm, &s, &retval) != NJS_OK) {
+        if (njs_vm_value_string(nvm, &s, njs_value_arg(&retval)) != NJS_OK) {
             njs_printf("njs_vm_value_string() failed\n");
             goto done;
         }
@@ -148,20 +191,38 @@ njs_benchmark_test(njs_vm_t *parent, njs_opts_t *opts, njs_value_t *report,
         goto done;
     }
 
-    ret = njs_vm_value_string_set(parent, &name, (u_char *) test->name,
-                                  njs_strlen(test->name));
+    ret = njs_vm_value_string_create(parent, njs_value_arg(&name),
+                                     (u_char *) test->name,
+                                     njs_strlen(test->name));
     if (ret != NJS_OK) {
-        njs_printf("njs_vm_value_string_set() failed\n");
+        njs_printf("njs_vm_value_string_create() failed\n");
         goto done;
     }
 
-    njs_value_number_set(&usec, 1000 * ns);
-    njs_value_number_set(&times, n);
+    njs_value_number_set(njs_value_arg(&usec), 1000 * ns);
+    njs_value_number_set(njs_value_arg(&times), n);
 
-    ret = njs_vm_object_alloc(parent, result, &name_key, &name,
-                              &usec_key, &usec, &times_key, &times, NULL);
+    ret = njs_vm_object_alloc(parent, result, NULL);
     if (ret != NJS_OK) {
         njs_printf("njs_vm_object_alloc() failed\n");
+        goto done;
+    }
+
+    ret = njs_vm_object_prop_set(parent, result, &name_key, &name);
+    if (ret != NJS_OK) {
+        njs_printf("njs_vm_object_prop_set() failed\n");
+        goto done;
+    }
+
+    ret = njs_vm_object_prop_set(parent, result, &usec_key, &usec);
+    if (ret != NJS_OK) {
+        njs_printf("njs_vm_object_prop_set() failed\n");
+        goto done;
+    }
+
+    ret = njs_vm_object_prop_set(parent, result, &times_key, &times);
+    if (ret != NJS_OK) {
+        njs_printf("njs_vm_object_prop_set() failed\n");
         goto done;
     }
 
@@ -224,6 +285,41 @@ static njs_benchmark_test_t  njs_test[] =
               "sum"),
       njs_str("4"),
       100000 },
+
+    { "string create 'abcdefABCDEF'",
+      njs_str("benchmark.string('create', 'abcdef', 1000000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create 'АБВГДЕ'",
+      njs_str("benchmark.string('create', 'АБВГДЕ', 1000000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create 'x'.repeat(24)",
+      njs_str("benchmark.string('create', 'x'.repeat(32), 1000000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create 'Д'.repeat(12)",
+      njs_str("benchmark.string('create', 'А'.repeat(16), 1000000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create chb 'x'.repeat(256)",
+      njs_str("benchmark.string('chb', 'x'.repeat(256), 10000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create chb 'Д'.repeat(128)",
+      njs_str("benchmark.string('chb', 'Д'.repeat(128), 10000)"),
+      njs_str("undefined"),
+      1 },
+
+    { "string create chb 'x'.repeat(128) + 'Д'.repeat(64)",
+      njs_str("benchmark.string('chb', 'x'.repeat(128) + 'Д'.repeat(64), 10000)"),
+      njs_str("undefined"),
+      1 },
 
     { "JSON.parse",
       njs_str("JSON.parse('{\"a\":123, \"XXX\":[3,4,null]}').a"),
@@ -373,6 +469,16 @@ static njs_benchmark_test_t  njs_test[] =
       njs_str("$shared.method('YES')"),
       njs_str("shared"),
       1000 },
+
+    { "exception",
+      njs_str("function f() { try { throw new Error('test') } catch (e) { return e.message } } [f].map(v=>v())[0]"),
+      njs_str("test"),
+      10000 },
+
+    { "exception.stack",
+      njs_str("function f() { try { throw new Error('test') } catch (e) { return e.stack } } [f].map(v=>v())[0]"),
+      njs_str("Error: test\n    at f (:1)\n    at anonymous (:1)\n    at Array.prototype.map (native)\n    at main (:1)\n"),
+      100 },
 };
 
 
@@ -408,8 +514,8 @@ main(int argc, char **argv)
     njs_str_t             out;
     njs_uint_t            i;
     njs_opts_t            opts;
-    njs_value_t           args[2], report, retval;
     njs_vm_opt_t          options;
+    njs_opaque_value_t    args[2], report, retval;
     njs_benchmark_test_t  *test;
 
     static const char  help[] =
@@ -488,9 +594,9 @@ main(int argc, char **argv)
         goto done;
     }
 
-    njs_vm_start(vm, &retval);
+    njs_vm_start(vm, njs_value_arg(&retval));
 
-    ret = njs_vm_array_alloc(vm, &report, 8);
+    ret = njs_vm_array_alloc(vm, njs_value_arg(&report), 8);
     if (ret != NJS_OK) {
         njs_printf("njs_vm_array_alloc() failed\n");
         goto done;
@@ -506,7 +612,7 @@ main(int argc, char **argv)
         if (strncmp(test->name, opts.prefix,
                     njs_min(strlen(test->name), strlen(opts.prefix))) == 0)
         {
-            ret = njs_benchmark_test(vm, &opts, &report, test);
+            ret = njs_benchmark_test(vm, &opts, njs_value_arg(&report), test);
 
             if (ret != NJS_OK) {
                 goto done;
@@ -515,19 +621,20 @@ main(int argc, char **argv)
     }
 
     if (opts.previous) {
-        ret = njs_vm_value_string_set(vm, &args[0], (u_char *) opts.previous,
-                                      njs_strlen(opts.previous));
+        ret = njs_vm_value_string_create(vm, njs_value_arg(&args[0]),
+                                         (u_char *) opts.previous,
+                                         njs_strlen(opts.previous));
         if (ret != NJS_OK) {
-            njs_printf("njs_vm_value_string_set() failed\n");
+            njs_printf("njs_vm_value_string_create() failed\n");
             goto done;
         }
 
-        args[1] = report;
+        njs_value_assign(&args[1], &report);
 
         njs_vm_invoke(vm, njs_vm_function(vm, &compare), njs_value_arg(&args),
-                      2, &retval);
+                      2, njs_value_arg(&retval));
 
-        ret = njs_vm_value_dump(vm, &out, &retval, 1, 1);
+        ret = njs_vm_value_dump(vm, &out, njs_value_arg(&retval), 1, 1);
         if (ret != NJS_OK) {
             njs_printf("njs_vm_value_dump() failed\n");
             goto done;
@@ -539,13 +646,14 @@ main(int argc, char **argv)
     }
 
     if (opts.dump_report) {
-        ret = njs_vm_json_stringify(vm, &report, 1, &retval);
+        ret = njs_vm_json_stringify(vm, njs_value_arg(&report), 1,
+                                    njs_value_arg(&retval));
         if (ret != NJS_OK) {
             njs_printf("njs_vm_json_stringify() failed\n");
             goto done;
         }
 
-        ret = njs_vm_value_dump(vm, &out, &retval, 1, 1);
+        ret = njs_vm_value_dump(vm, &out, njs_value_arg(&retval), 1, 1);
         if (ret != NJS_OK) {
             njs_printf("njs_vm_value_dump() failed\n");
             goto done;
@@ -569,4 +677,95 @@ invalid_options:
                  argv[0]);
 
     return EXIT_FAILURE;
+}
+
+
+static njs_int_t
+njs_benchmark_preinit(njs_vm_t *vm)
+{
+    njs_benchmark_proto_id = njs_vm_external_prototype(vm,
+                                           njs_benchmark_external,
+                                           njs_nitems(njs_benchmark_external));
+    if (njs_slow_path(njs_benchmark_proto_id < 0)) {
+        njs_printf("njs_vm_external_prototype() failed\n");
+        return NJS_ERROR;
+    }
+
+    return NJS_OK;
+}
+
+
+static njs_int_t
+njs_benchmark_init(njs_vm_t *vm)
+{
+    njs_int_t           ret;
+    njs_opaque_value_t  value;
+
+    static const njs_str_t  benchmark = njs_str("benchmark");
+
+    ret = njs_vm_external_create(vm, njs_value_arg(&value),
+                                 njs_benchmark_proto_id, NULL, 1);
+    if (njs_slow_path(ret != NJS_OK)) {
+        return NJS_ERROR;
+    }
+
+    ret = njs_vm_bind(vm, &benchmark, njs_value_arg(&value), 1);
+    if (njs_slow_path(ret != NJS_OK)) {
+        njs_printf("njs_vm_bind() failed\n");
+        return NJS_ERROR;
+    }
+
+    return NJS_OK;
+}
+
+
+static njs_int_t
+njs_benchmark_string(njs_vm_t *vm, njs_value_t *args, njs_uint_t nargs,
+    njs_index_t unused, njs_value_t *retval)
+{
+    int64_t             i, n;
+    njs_chb_t           chain;
+    njs_str_t           s, mode;
+    njs_opaque_value_t  value;
+
+    njs_value_string_get(njs_arg(args, nargs, 1), &mode);
+
+    njs_value_string_get(njs_arg(args, nargs, 2), &s);
+
+    if (njs_value_to_integer(vm, njs_arg(args, nargs, 3), &n) != NJS_OK) {
+        return NJS_ERROR;
+    }
+
+    if (memcmp(mode.start, "create", 6) == 0) {
+
+        for (i = 0; i < n; i++) {
+            njs_vm_value_string_create(vm, njs_value_arg(&value), s.start,
+                                       s.length);
+        }
+
+    } else if (memcmp(mode.start, "chb", 3) == 0) {
+
+        NJS_CHB_MP_INIT(&chain, vm);
+
+        njs_chb_append_literal(&chain, "abc");
+        njs_chb_append(&chain, s.start, s.length);
+        njs_chb_append_literal(&chain, "abc");
+        njs_chb_append(&chain, s.start, s.length);
+        njs_chb_append_literal(&chain, "abc");
+        njs_chb_append(&chain, s.start, s.length);
+
+        for (i = 0; i < n; i++) {
+            njs_vm_value_string_create_chb(vm, njs_value_arg(&value), &chain);
+        }
+
+        njs_chb_destroy(&chain);
+
+    } else {
+        njs_vm_type_error(vm, "unknown mode \"%V\"", &mode);
+        return NJS_ERROR;
+    }
+
+    njs_value_undefined_set(retval);
+
+    return NJS_OK;
 }

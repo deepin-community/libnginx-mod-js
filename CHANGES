@@ -1,3 +1,158 @@
+Changes with njs 0.8.9                                       14 Jan 2025
+
+    nginx modules:
+
+    *) Bugfix: removed extra VM creation per server.
+       Previously, when js_import was declared in http or stream blocks,
+       an extra copy of the VM instance was created for each server
+       block. This was not needed and consumed a lot of memory for
+       configurations with many server blocks.
+
+      This issue was introduced in 9b674412 (0.8.6) and was partially
+      fixed for location blocks only in 685b64f0 (0.8.7).
+
+    Core:
+
+    *) Feature: added fs module for QuickJS engine.
+
+Changes with njs 0.8.8                                       10 Dec 2024
+
+    nginx modules:
+
+    *) Feature: implemented shared dictionary for QuickJS engine.
+
+    *) Improvement: js_preload_object is refactored.
+
+    *) Bugfix: fixed limit rated output.
+
+    *) Bugfix: optimized use of SSL contexts for
+       js_fetch_trusted_certificate directive.
+
+    Core:
+
+    *) Feature: implemented process object for QuickJS engine.
+
+    *) Feature: implemented process.kill() method.
+
+    *) Bugfix: fixed tests with libxml2 2.13 and later.
+
+    *) Bugfix: fixed promise resolving when Promise is inherited.
+
+    *) Bugfix: fixed absolute scope in cloned VMs.
+
+Changes with njs 0.8.7                                       22 Oct 2024
+
+    nginx modules:
+
+    *) Bugfix: eliminated unnecessary VM creation.
+       Previously, njs consumed memory proportionally to the number of
+       nginx locations. The issue was introduced in 9b674412 (0.8.6).
+
+    *) Improvement: added strict syntax validation for js_body_filter.
+
+    *) Improvement: improved error messages for module loading
+       failures.
+
+    Core:
+
+    *) Feature: implemented fs.readlink() and friends.
+
+    *) Improvement: implemented lazy stack symbolization.
+
+    *) Bugfix: fixed heap-buffer-overflow in Buffer.prototype.indexOf().
+       The issue was introduced in 5d15a8d6 (0.8.6).
+
+    *) Bugfix: fixed Buffer.prototype.lastIndexOf() when `from` is
+       provided.
+
+Changes with njs 0.8.6                                       02 Oct 2024
+
+    nginx modules:
+
+    *) Feature: introduced QuickJS engine.
+
+    *) Feature: added optional nocache flag for js_set directive.
+       Thanks to Thomas P.
+
+    *) Feature: exposed capture group variables in HTTP module.
+       Thanks to Thomas P.
+
+    Core:
+
+    *) Feature: added Buffer module for QuickJS engine.
+
+    *) Bugfix: fixed handling of empty labelled statement in a function.
+
+    *) Bugfix: fixed Function constructor handling when called without
+       arguments.
+
+    *) Bugfix: fixed Buffer.prototype.writeInt8() and friends.
+
+    *) Bugfix: fixed Buffer.prototype.writeFloat() and friends.
+
+    *) Bugfix: fixed Buffer.prototype.lastIndexOf().
+
+    *) Bugfix: fixed Buffer.prototype.write().
+
+    *) Bugfix: fixed maybe-uninitialized warnings in error creation.
+
+    *) Bugfix: fixed 'ctx.codepoint' initialization in UTF-8 decoding.
+
+    *) Bugfix: fixed 'length' initialization in Array.prototype.pop().
+
+    *) Bugfix: fixed handling of encode arg in fs.readdir() and
+       fs.realpath().
+
+Changes with njs 0.8.5                                       25 Jun 2024
+
+    nginx modules:
+
+    *) Change: r.variables.var, r.requestText, r.responseText,
+       s.variables.var, and the "data" argument of the s.on() callback
+       with "upload" or "download" event types will now convert bytes
+       invalid in UTF-8 encoding into the replacement character.  When
+       working with binary data, use r.rawVariables.var, r.requestBuffer,
+       r.responseBuffer, s.rawVariables.var, and the "upstream" or
+       "downstream" event type for s.on() instead.
+
+    *) Feature: added timeout argument for shared dictionary methods
+       add(), set() and incr().
+
+    *) Bugfix: fixed checking for duplicate js_set variables.
+
+    *) Bugfix: fixed request Host header when the port is non-standard.
+
+    *) Bugfix: fixed handling of a zero-length request body in ngx.fetch()
+       and r.subrequest().
+
+    *) Bugfix: fixed heap-buffer-overflow in Headers.get().
+
+    *) Bugfix: fixed r.subrequest() error handling.
+
+    Core:
+
+    *) Feature: added zlib module for QuickJS engine.
+
+    *) Bugfix: fixed zlib.inflate().
+
+    *) Bugfix: fixed String.prototype.replaceAll() with zero-length
+       argument.
+
+    *) Bugfix: fixed retval handling after an exception in
+       Array.prototype.toSpliced(), Array.prototype.toReversed(),
+       Array.prototype.toSorted().
+
+    *) Bugfix: fixed RegExp.prototype[@@replace]() with replacements
+       containing "$'", "$\`" and strings with Unicode characters.
+
+    *) Bugfix: fixed a one-byte overread in decodeURI() and
+       decodeURIComponent().
+
+    *) Bugfix: fixed tracking of argument scope.
+
+    *) Bugfix: fixed integer overflow in Date.parse().
+
+
 Changes with njs 0.8.4                                       16 Apr 2024
 
     nginx modules:

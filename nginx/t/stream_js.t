@@ -366,8 +366,7 @@ $t->write_file('test.js', <<EOF);
     }
 
     function preread_except(s) {
-        var fs = require('fs');
-        fs.readFileSync();
+        decodeURI("%E0");
     }
 
     function filter_except(s) {
@@ -395,7 +394,7 @@ $t->write_file('test.js', <<EOF);
 EOF
 
 $t->run_daemon(\&stream_daemon, port(8090));
-$t->try_run('no stream njs available')->plan(24);
+$t->try_run('no stream njs available')->plan(25);
 $t->waitforsocket('127.0.0.1:' . port(8090));
 
 ###############################################################################
@@ -441,7 +440,7 @@ like(stream('127.0.0.1:' . port(8101))->read(), qr/\xaa\xbb\xcc\xdd/,
 $t->stop();
 
 ok(index($t->read_file('error.log'), 'SEE-THIS') > 0, 'stream js log');
-ok(index($t->read_file('error.log'), 'at fs.readFileSync') > 0,
+ok(index($t->read_file('error.log'), 'at decodeURI') > 0,
 	'stream js_preread backtrace');
 ok(index($t->read_file('error.log'), 'at filter_except') > 0,
 	'stream js_filter backtrace');
@@ -450,6 +449,10 @@ my @p = (port(8087), port(8088), port(8089));
 like($t->read_file('status.log'), qr/$p[0]:200/, 'status undecided');
 like($t->read_file('status.log'), qr/$p[1]:200/, 'status allow');
 like($t->read_file('status.log'), qr/$p[2]:403/, 'status deny');
+
+my $content = $t->read_file('error.log');
+my $count = () = $content =~ m/ js vm init/g;
+ok($count == 2, 'http and stream js blocks imported once each');
 
 ###############################################################################
 

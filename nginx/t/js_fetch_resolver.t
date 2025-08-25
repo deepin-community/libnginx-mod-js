@@ -50,6 +50,10 @@ http {
             js_content test.njs;
         }
 
+        location /engine {
+            js_content test.engine;
+        }
+
         location /dns {
             js_content test.dns;
 
@@ -64,6 +68,23 @@ http {
 
         location /loc {
             js_content test.loc;
+        }
+
+        location /host {
+            return 200 8080:$http_host;
+        }
+    }
+
+    server {
+        listen       127.0.0.1:8081;
+        server_name  aaa;
+
+        location /loc {
+            js_content test.loc;
+        }
+
+        location /host {
+            return 200 8081:$http_host;
         }
     }
 
@@ -80,19 +101,33 @@ http {
 EOF
 
 my $p0 = port(8080);
+my $p1 = port(8081);
 
 $t->write_file('test.js', <<EOF);
     function test_njs(r) {
         r.return(200, njs.version);
     }
 
-    function dns(r) {
-        var url = `http://\${r.args.domain}:$p0/loc`;
+    function engine(r) {
+        r.return(200, njs.engine);
+    }
 
-        ngx.fetch(url)
-        .then(reply => reply.text())
-        .then(body => r.return(200, body))
-        .catch(e => r.return(501, e.message))
+    const p0 = $p0;
+    const p1 = $p1;
+
+    async function dns(r) {
+        var port = r.args.port == undefined || r.args.port == 'p0' ? p0 : p1;
+        var loc = r.args.loc == undefined ? 'loc' : r.args.loc;
+        var url = `http://\${r.args.domain}:\${port}/\${loc}`;
+
+        try {
+            let reply = await ngx.fetch(url);
+            let body = await reply.text();
+            r.return(200, body);
+
+        } catch (e) {
+            r.return(501, e.message);
+        }
     }
 
     function str(v) { return v ? v : ''};
@@ -106,10 +141,14 @@ $t->write_file('test.js', <<EOF);
         r.return(c, `\${v.host}:\${v.request_method}:\${foo}:\${bar}:\${body}`);
     }
 
-     export default {njs: test_njs, dns, loc};
+     export default {njs: test_njs, dns, loc, engine};
 EOF
 
-$t->try_run('no njs.fetch')->plan(3);
+$t->try_run('no njs.fetch');
+
+plan(skip_all => 'not yet') if http_get('/engine') =~ /QuickJS$/m;
+
+$t->plan(5);
 
 $t->run_daemon(\&dns_daemon, port(8981), $t);
 $t->waitforfile($t->testdir . '/' . port(8981));
@@ -120,6 +159,34 @@ like(http_get('/dns?domain=aaa'), qr/aaa:GET:::$/s, 'fetch dns aaa');
 like(http_get('/dns?domain=many'), qr/many:GET:::$/s, 'fetch dns many');
 like(http_get('/dns?domain=unknown'), qr/"unknown" could not be resolved/s,
 	'fetch dns unknown');
+
+TODO: {
+local $TODO = 'not yet' unless has_version('0.8.5');
+
+like(http_get('/dns?domain=aaa&port=p0&loc=host'), qr/8080:aaa:$p0$/s,
+	'fetch aaa:8080');
+like(http_get('/dns?domain=aaa&port=p1&loc=host'), qr/8081:aaa:$p1$/s,
+	'fetch aaa:8081');
+}
+
+###############################################################################
+
+sub has_version {
+	my $need = shift;
+
+	http_get('/njs') =~ /^([.0-9]+)$/m;
+
+	my @v = split(/\./, $1);
+	my ($n, $v);
+
+	for $n (split(/\./, $need)) {
+		$v = shift @v || 0;
+		return 0 if $n > $v;
+		return 1 if $v > $n;
+	}
+
+	return 1;
+}
 
 ###############################################################################
 

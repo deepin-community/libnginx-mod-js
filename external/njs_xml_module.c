@@ -584,8 +584,8 @@ njs_xml_node_ext_prop_keys(njs_vm_t *vm, njs_value_t *value, njs_value_t *keys)
             return NJS_ERROR;
         }
 
-        ret = njs_vm_value_string_set(vm, push, (u_char *) "$name",
-                                      njs_length("$name"));
+        ret = njs_vm_value_string_create(vm, push, (u_char *) "$name",
+                                         njs_length("$name"));
         if (njs_slow_path(ret != NJS_OK)) {
             return NJS_ERROR;
         }
@@ -597,8 +597,8 @@ njs_xml_node_ext_prop_keys(njs_vm_t *vm, njs_value_t *value, njs_value_t *keys)
             return NJS_ERROR;
         }
 
-        ret = njs_vm_value_string_set(vm, push, (u_char *) "$ns",
-                                      njs_length("$ns"));
+        ret = njs_vm_value_string_create(vm, push, (u_char *) "$ns",
+                                         njs_length("$ns"));
         if (njs_slow_path(ret != NJS_OK)) {
             return NJS_ERROR;
         }
@@ -610,8 +610,8 @@ njs_xml_node_ext_prop_keys(njs_vm_t *vm, njs_value_t *value, njs_value_t *keys)
             return NJS_ERROR;
         }
 
-        ret = njs_vm_value_string_set(vm, push, (u_char *) "$attrs",
-                                      njs_length("$attrs"));
+        ret = njs_vm_value_string_create(vm, push, (u_char *) "$attrs",
+                                         njs_length("$attrs"));
         if (njs_slow_path(ret != NJS_OK)) {
             return NJS_ERROR;
         }
@@ -623,8 +623,8 @@ njs_xml_node_ext_prop_keys(njs_vm_t *vm, njs_value_t *value, njs_value_t *keys)
             return NJS_ERROR;
         }
 
-        ret = njs_vm_value_string_set(vm, push, (u_char *) "$text",
-                                      njs_length("$text"));
+        ret = njs_vm_value_string_create(vm, push, (u_char *) "$text",
+                                         njs_length("$text"));
         if (njs_slow_path(ret != NJS_OK)) {
             return NJS_ERROR;
         }
@@ -640,8 +640,8 @@ njs_xml_node_ext_prop_keys(njs_vm_t *vm, njs_value_t *value, njs_value_t *keys)
             return NJS_ERROR;
         }
 
-        ret = njs_vm_value_string_set(vm, push, (u_char *) "$tags",
-                                      njs_length("$tags"));
+        ret = njs_vm_value_string_create(vm, push, (u_char *) "$tags",
+                                         njs_length("$tags"));
         if (njs_slow_path(ret != NJS_OK)) {
             return NJS_ERROR;
         }
@@ -1275,15 +1275,11 @@ njs_xml_node_tags_handler(njs_vm_t *vm, xmlNode *current, njs_str_t *name,
 
     /* set or delete. */
 
-    copy = xmlDocCopyNode(current, current->doc, 1);
+    copy = xmlDocCopyNode(current, current->doc,
+                          2 /* copy properties and namespaces */);
     if (njs_slow_path(copy == NULL)) {
         njs_vm_internal_error(vm, "xmlDocCopyNode() failed");
         return NJS_ERROR;
-    }
-
-    if (copy->children != NULL) {
-        xmlFreeNodeList(copy->children);
-        copy->children = NULL;
     }
 
     if (retval == NULL) {
@@ -1322,12 +1318,12 @@ njs_xml_node_tags_handler(njs_vm_t *vm, xmlNode *current, njs_str_t *name,
             xmlFreeNode(node);
             goto error;
         }
+    }
 
-        ret = xmlReconciliateNs(current->doc, copy);
-        if (njs_slow_path(ret == -1)) {
-            njs_vm_internal_error(vm, "xmlReconciliateNs() failed");
-            goto error;
-        }
+    ret = xmlReconciliateNs(current->doc, copy);
+    if (njs_slow_path(ret == -1)) {
+        njs_vm_internal_error(vm, "xmlReconciliateNs() failed");
+        goto error;
     }
 
     njs_value_undefined_set(retval);
@@ -1788,7 +1784,7 @@ njs_xml_ext_canonicalization(njs_vm_t *vm, njs_value_t *args, njs_uint_t nargs,
         }
     }
 
-    njs_chb_init(&chain, njs_vm_memory_pool(vm));
+    NJS_CHB_MP_INIT(&chain, vm);
 
     buf = xmlOutputBufferCreateIO(njs_xml_buf_write_cb, NULL, &chain, NULL);
     if (njs_slow_path(buf == NULL)) {

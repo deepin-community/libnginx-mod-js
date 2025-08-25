@@ -1,10 +1,11 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 
 Files: *
-Copyright: 2022, 2024, Vadim Zhestikov
+Copyright: 2022, 2025, Vadim Zhestikov
  2019-2022, Alexander Borisov
- 2017-2024, Dmitry Volyntsev
- 2015-2024, NGINX, Inc.
+ 2017-2025, Dmitry Volyntsev
+ 2015-2019, NGINX, Inc.
+ 2019-2025 F5, Inc.
  2015-2021, Igor Sysoev
 License: BSD-2-clause
 
